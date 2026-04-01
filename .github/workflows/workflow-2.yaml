@@ -1,0 +1,56 @@
+name: Workflow 2 - Projects 6-10
+
+on:
+  workflow_run:
+    workflows: ["Workflow 1 - Projects 1-5"]
+    types:
+      - completed
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  run-projects:
+    runs-on: ubuntu-latest
+    # Only run if the previous workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      matrix:
+        project: [project6, project7, project8, project9, project10]
+      fail-fast: false  # Continue running other projects even if one fails
+      max-parallel: 1   # Run projects one at a time in sequence
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run ${{ matrix.project }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+        run: |
+          echo "Running ${{ matrix.project }}..."
+          python -m ${{ matrix.project }}.main
+
+      - name: Upload logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.project }}-logs
+          path: |
+            *.log
+            temp_downloads/
+          retention-days: 7
+          if-no-files-found: ignore
